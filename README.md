@@ -75,34 +75,34 @@ ship --staged
 
 Other edited or untracked files stay out of that commit.
 
-| Command | What it does |
-| --- | --- |
-| `ship` | Include all changes, review, commit, and push. |
-| `ship --staged` | Include only changes already selected with `git add`. |
-| `ship --remote upstream` | Use the Git connection named `upstream` instead of `origin`. |
-| `ship --pr` | Generate and review a pull request from your current work branch. |
-| `ship --merge` | Create/reuse a PR, squash merge, and clean up the work branch. |
-| `ship --help` | Show help. |
+| Command                  | What it does                                                      |
+| ------------------------ | ----------------------------------------------------------------- |
+| `ship`                   | Include all changes, review, commit, and push.                    |
+| `ship --staged`          | Include only changes already selected with `git add`.             |
+| `ship --remote upstream` | Use the Git connection named `upstream` instead of `origin`.      |
+| `ship --pr`              | Generate and review a pull request from your current work branch. |
+| `ship --merge`           | Create/reuse a PR, squash merge, and clean up the work branch. **Deletes the branch after**    |
+| `ship --help`            | Show help.                                                        |
 
 Options can be combined: `ship --staged --remote upstream`.
 
 ## New project?
 
-Run `ship` in the project folder. It offers to initialize Git and create a GitHub repository. Choose **private or public**, then enter a **repository name**. Press Enter to use the folder name, or enter `owner/name` to choose an owner. You can also connect an existing repository instead.
+Run `ship` in the project folder. It offers to initialize Git and create a GitHub repository. You can also connect an existing repository instead.
 
-Setup creates an empty GitHub repository. Uploading code still requires approval at the commit review. If you cancel later, Git setup and the empty repository remain.
+Setup creates an empty GitHub repository. Uploading code still requires approval at the commit review.
 
 ## How branches work
 
-| Where you are | What `ship` does |
-| --- | --- |
-| A new project on `main`, with no commits yet | Make the first commit on `main`. |
-| `main` after the first commit | Choose a direct commit to `main` or the suggested new branch. |
-| An existing work branch | Keep that branch and suggest a commit message. |
+| Where you are                                | What `ship` does                                              |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| A new project on `main`, with no commits yet | Make the first commit on `main`.                              |
+| `main` after the first commit                | Choose a direct commit to `main` or the suggested new branch. |
+| An existing work branch                      | Keep that branch and suggest a commit message.                |
 
-`master` and other known remote default branches still use a new work branch. Direct commits to `main` require choosing that option at review.
+Direct commits to `main` require choosing that option at review.
 
-Use direct commits for small fixes when you want to keep things simple. Use a work branch when you want to review a change as a PR.
+Use direct commits for small fixes when you want to keep things simple. Use a work branch when you have larger changes or need to test one change at a time.
 
 ## PRs and merging
 
@@ -113,21 +113,21 @@ ship --pr       # Create a PR and leave it open
 ship --merge    # Create/reuse a PR, then merge and clean up
 ```
 
-Both commands ask which remote branch to target, with **`main` listed first**. For a new PR, `cmd` generates the title and description from the branch's committed changes after local secret checks. You can edit the text or review the diff before approving. An existing open PR is reused; its text is kept unless you edit it.
+Both commands ask which remote branch to target. For a new PR, Command Code generates the title and description from the branch's committed changes after local secret checks. You can edit the text or review the diff before approving. An existing open PR is reused; its text is kept unless you edit it.
 
 `--merge` warns if you still have staged, unstaged, or untracked changes. It offers to **ship those changes first and continue**, or **cancel**. `--pr` uses the same check so your PR includes the work you intended.
 
-After approval, `ship` pushes the branch if needed. `--pr` prints the PR link. `--merge` performs a squash merge, respecting GitHub's checks and review requirements. Once the merge is confirmed, it updates your local target branch, switches you to it, and removes the reviewed work branch locally and remotely. If merging is blocked or cleanup cannot safely finish, it reports what happened and keeps the remaining branch/work.
+After approval, `ship` pushes the branch if needed. `--pr` prints the PR link. `--merge` performs a squash merge, respecting GitHub's checks and review requirements. Once the merge is confirmed, it updates your local target branch, switches you to it, and **removes the reviewed work branch locally and remotely**. If merging is blocked or cleanup cannot safely finish, it reports what happened and keeps the remaining branch/work.
 
 There is no automatic merge when running plain `ship` or `ship --pr`. Use `--remote NAME` with any mode to choose a different repository connection. `--staged` is for committing; run it separately before a PR/merge if you want to select only some changes.
 
 ## Secrets and failures
 
-Before asking `cmd` for a suggestion, `ship` checks sensitive filenames and scans the exact outgoing text with Gitleaks. Possible secrets block generation. It offers appropriate actions: keep a local file out of Git, open your editor to fix source, enter a message manually, or cancel.
+Before asking Command Code for a suggestion, `ship` checks sensitive filenames and scans the exact outgoing text with Gitleaks. Possible secrets block generation. It offers appropriate actions: keep a local file out of Git, open your editor to fix source, enter a message manually, or cancel.
 
 For commits, the model receives staged text changes and file metadata, including deleted lines. For PR text, it receives the branch diff from its shared ancestor with the target and the included commit subjects. Binary contents, unstaged changes, Git history, and remote URLs are excluded. Checks are best effort; manual entry does not make a commit secret-free.
 
-If `cmd` or Gitleaks is unavailable or fails, you can enter commit details manually or cancel. If a commit succeeds but its push fails, the commit stays local: run `ship --staged` again to review a push-only retry, or use the retry command it prints.
+If Command Code or Gitleaks is unavailable or fails, you can enter commit details manually or cancel. If a commit succeeds but its push fails, the commit stays local: run `ship --staged` again to review a push-only retry, or use the retry command it prints.
 
 ## Updating and development
 
