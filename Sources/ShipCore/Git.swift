@@ -139,6 +139,15 @@ final class Git {
         return protected
     }
 
+    // Bootstrap main once, and allow push-only recovery if that first push fails.
+    // A known published main, or any main with a parent commit, stays protected.
+    func allowsInitialMain(_ state: RepositoryState) throws -> Bool {
+        guard state.branch == "main" else { return false }
+        guard let head = state.head else { return true }
+        guard try resolve("refs/remotes/\(remote)/main") == nil else { return false }
+        return try text(["show", "-s", "--format=%P", head]).isEmpty
+    }
+
     func validateNewBranch(_ name: String) throws {
         guard isSingleLine(name), !name.hasPrefix("-"), name != "HEAD",
               !name.hasPrefix("refs/"), !name.contains("@{"),

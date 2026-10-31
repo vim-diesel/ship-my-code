@@ -72,7 +72,7 @@ final class Fixture {
             _ = try git.run(git.pushArguments(branch: branch))
             _ = try git.run(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/" + branch])
         }
-        try modelOutput(branch == "main" || branch == "master" ? "feat/test-change" : nil)
+        try modelOutput((branch == "main" && initial) || branch == "master" ? "feat/test-change" : nil)
         try script("cmd", """
         if [ "$1" = "--help" ]; then
           printf '%s\\n' 'Command Code --print --effort --max-turns --no-session'

@@ -131,7 +131,7 @@ struct Options {
     New project? ship offers to initialize Git and create a private/public GitHub repo with gh.
     By default, git add -A stages the WHOLE repository, even from a subdirectory.
     --staged preserves your existing selection; unstaged/untracked files are excluded.
-    main, master, and the selected remote's known default branch are protected.
+    The first commit stays on main. After that, main, master, and the remote default are protected.
     EOF, Ctrl-C, or an empty approval cancels; staged and approved remediation edits remain.
     Model generation uses your cmd login/model through a tool-free bridge after local gitleaks scanning.
     """

@@ -55,8 +55,10 @@ final class Workflow {
             console.write("--staged: unstaged and untracked changes are excluded and remain untouched.")
         }
         let initial = try git.state()
-        let needsBranch = try git.protectedBranches().contains(initial.branch)
+        let firstCommitOnMain = initial.head == nil && initial.branch == "main"
+        let needsBranch = try !firstCommitOnMain && git.protectedBranches().contains(initial.branch)
         console.write("Repository: \(display(git.root.path))\nBranch:     \(display(initial.branch))")
+        if firstCommitOnMain { console.write("Your first commit will establish main. Later changes will use work branches.") }
         var localSuggestion = false
         while true {
             try git.preflight()
@@ -237,7 +239,9 @@ final class Workflow {
     }
 
     private func validatePushReview(_ git: Git, branch: String, comparison: PushComparison, identity: Data) throws {
-        guard try !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to commit or push to a protected branch.") }
+        let state = try git.state()
+        let initialMain = try branch == state.branch && git.allowsInitialMain(state)
+        guard try initialMain || !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to commit or push to a protected branch.") }
         guard try git.comparison(branch: branch) == comparison, try git.remoteIdentity() == identity else {
             throw ShipError.message("Remote destination or locally known remote state changed after review. Run ship again for a fresh review.")
         }
@@ -276,7 +280,7 @@ final class Workflow {
 
     private func pushOnly(_ git: Git) throws {
         let state = try git.state()
-        guard state.head != nil, try !git.protectedBranches().contains(state.branch) else {
+        guard state.head != nil, try git.allowsInitialMain(state) || !git.protectedBranches().contains(state.branch) else {
             console.write("Nothing to ship."); return
         }
         let comparison = try git.comparison(branch: state.branch)
@@ -292,7 +296,8 @@ final class Workflow {
 
     private func push(_ git: Git, state: RepositoryState, branch: String) throws {
         try git.verify(state)
-        guard try !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to push a protected branch. Any new commit remains local.") }
+        let initialMain = try branch == state.branch && git.allowsInitialMain(state)
+        guard try initialMain || !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to push a protected branch. Any new commit remains local.") }
         do { _ = try git.run(git.pushArguments(branch: branch)) }
         catch {
             console.write("Push did not complete successfully. The commit exists locally; the remote may have received it. Rerun ship to review recovery, or retry exactly:")

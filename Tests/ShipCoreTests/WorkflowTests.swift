@@ -175,9 +175,9 @@ final class WorkflowTests: XCTestCase {
         try f.write(".env", "SHIP_TEST_SECRET\n")
         let c = ScriptConsole(["1", "y"])
         try f.workflow(c).run()
-        XCTAssertEqual(try f.git.branch(), "feat/test-change")
+        XCTAssertEqual(try f.git.branch(), "main")
         XCTAssertEqual(try f.read(".env"), "SHIP_TEST_SECRET\n")
-        XCTAssertNotNil(try f.remoteHash("feat/test-change"))
+        XCTAssertNotNil(try f.remoteHash("main"))
     }
 
     func testStopTrackingUsesLocalSuggestionAndKeepsFile() throws {

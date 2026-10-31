@@ -86,7 +86,7 @@ Stdin and stdout must both be interactive terminals. There is no `--yes` option.
 
 The tool offers setup for missing repositories or connections. It stops before staging if HEAD is detached, conflicts are unresolved, or a merge, rebase, cherry-pick, revert, sequencer operation, or bisect is unfinished. Git operations run at the repository root. Redirecting `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, or `GIT_COMMON_DIR` is rejected to avoid acting on an ambiguous index.
 
-`main`, `master`, and the selected remote's default branch from locally available `refs/remotes/REMOTE/HEAD` are protected. On those branches, enter a new branch name. On a work branch, keep that branch. Existing local or locally known remote branch names cannot be reused. No fetch happens automatically, so a remote name collision not known locally can still cause a push rejection. No history is rewritten or moved off the original branch.
+**The first commit in a new project stays on `main`**, so the project has a default branch from the start. If that first push fails, rerunning `ship` can publish the initial commit without making another commit. After that, `main`, `master`, and the selected remote's known default branch are protected: `ship` proposes a new work branch for changes on those branches. On an existing work branch, it keeps that branch. Existing local or locally known remote branch names cannot be reused. No fetch happens automatically, so a remote name collision not known locally can still cause a push rejection. No history is rewritten or moved off the original branch.
 
 Example final review:
 
@@ -160,7 +160,7 @@ Before approval, ship lists existing outgoing commits with abbreviated hashes an
 
 Push uses an explicit `refs/heads/BRANCH:refs/heads/BRANCH` refspec, sets upstream, disables follow-tags, remote mirror behavior, and recursive submodule pushing. Ambient push refspecs cannot add other branches. There is no force push, merge, rebase, stash, reset, branch deletion, or PR creation.
 
-With no staged changes, an ahead work branch offers push-only confirmation; a work branch without a known destination offers publication with the same caveats. No model or scanner is invoked for push-only operation. Protected branches are never offered for push. Otherwise the tool prints `Nothing to ship.`
+With no staged changes, an ahead work branch offers push-only confirmation; a work branch without a known destination offers publication with the same caveats. No model or scanner is invoked for push-only operation. Protected branches are not offered for push, except to recover publication of the single initial commit on `main`. Otherwise the tool prints `Nothing to ship.`
 
 Before actions, ship rechecks the reviewed branch, HEAD, staged tree, remote identity, and local comparison. Changes stop the operation for fresh review. Normal hooks run. After commit, the committed tree, index, parent, message, and branch must still match approval before push.
 
