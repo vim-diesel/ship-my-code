@@ -127,12 +127,18 @@ struct Options {
     static let usage = """
     Usage: ship [--staged] [--remote NAME] [--help]
 
-    Review, commit, and push one branch interactively. Remote defaults to origin.
-    New project? ship offers to initialize Git and create a private/public GitHub repo with gh.
-    By default, git add -A stages the WHOLE repository, even from a subdirectory.
-    --staged preserves your existing selection; unstaged/untracked files are excluded.
-    The first commit stays on main. After that, main, master, and the remote default are protected.
-    EOF, Ctrl-C, or an empty approval cancels; staged and approved remediation edits remain.
-    Model generation uses your cmd login/model through a tool-free bridge after local gitleaks scanning.
+    Get a commit suggestion, review your changes, then approve the commit and push.
+
+    ship                 Include all changes across the project, except ignored files.
+    ship --staged        Include only changes already selected with git add.
+    ship --remote NAME   Use another Git connection instead of origin.
+    ship --help          Show this help.
+
+    New projects: set up Git, choose a GitHub repo name and private/public visibility.
+    First commit: stay on main. Later changes on main: create a work branch.
+    Already on a work branch: keep using it. Merging and branch cleanup are separate.
+
+    Uses your cmd login and selected model, with local gitleaks checks first.
+    Enter at the approval prompt cancels. Selected changes remain staged.
     """
 }

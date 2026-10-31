@@ -17,18 +17,14 @@ final class ScriptConsole: Console {
     }
 }
 
-// Workflow test double; production uses Command Code's tool-free completion bridge.
-final class FakeModel: Generating {
-    let runner: ProcessRunner
-    let executable: String
+// Exercise the production adapter against the fixture's fake cmd executable.
+final class RecordingModel: Generating {
+    private let commandCode: CommandCode
     var calls = 0
-    init(runner: ProcessRunner, executable: String) { self.runner = runner; self.executable = executable }
+    init(runner: ProcessRunner) { commandCode = CommandCode(runner: runner) }
     func generate(_ payload: Data, needsBranch: Bool) throws -> Proposal {
         calls += 1
-        let isolated = try TemporaryDirectory()
-        let result = try runner.run(executable, ["-p", "--effort", "low", "--max-turns", "1", "--no-session"], cwd: isolated.url, input: payload)
-        guard result.status == 0 else { throw ShipError.message("cmd failed; output withheld.") }
-        return try Proposal.decode(result.stdout, needsBranch: needsBranch)
+        return try commandCode.generate(payload, needsBranch: needsBranch)
     }
 }
 
@@ -40,7 +36,7 @@ final class Fixture {
     let runner: ProcessRunner
     let git: Git
     let scanner: GitleaksScanner
-    let model: FakeModel
+    let model: RecordingModel
 
     init(initial: Bool = true, branch: String = "main") throws {
         temp = try TemporaryDirectory()
@@ -64,7 +60,7 @@ final class Fixture {
         _ = try runner.run("/usr/bin/git", ["-C", root.path, "remote", "add", "origin", remote.path], cwd: temp.url)
         git = try Git(runner: runner, directory: root, remote: "origin")
         scanner = GitleaksScanner(runner: runner)
-        model = FakeModel(runner: runner, executable: bin.appendingPathComponent("cmd").path)
+        model = RecordingModel(runner: runner)
         try write("readme.txt", "initial\n")
         if initial {
             _ = try git.run(["add", "readme.txt"])
@@ -75,7 +71,7 @@ final class Fixture {
         try modelOutput((branch == "main" && initial) || branch == "master" ? "feat/test-change" : nil)
         try script("cmd", """
         if [ "$1" = "--help" ]; then
-          printf '%s\\n' 'Command Code --print --effort --max-turns --no-session'
+          printf '%s\\n' 'Command Code --mod --no-skills --no-session --max-turns --permission-mode --no-auto-update --skip-onboarding'
           exit 0
         fi
         /bin/cat > \(shellQuote(temp.url.appendingPathComponent("model-input").path))
@@ -120,7 +116,12 @@ final class Fixture {
     }
     func modelOutput(_ branch: String?, message: String = "feat: add test change") throws {
         let object: [String: Any] = ["branch": branch as Any? ?? NSNull(), "message": message]
-        try JSONSerialization.data(withJSONObject: object).write(to: temp.url.appendingPathComponent("model-output"))
+        let proposal = try JSONSerialization.data(withJSONObject: object)
+        try modelResponse(String(decoding: proposal, as: UTF8.self))
+    }
+    func modelResponse(_ text: String) throws {
+        try JSONSerialization.data(withJSONObject: ["shipBridge": 1, "text": text])
+            .write(to: temp.url.appendingPathComponent("model-output"))
     }
     func workBranch(_ branch: String = "work/test") throws {
         _ = try git.run(["switch", "-c", branch])

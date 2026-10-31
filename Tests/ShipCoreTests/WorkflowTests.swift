@@ -69,7 +69,7 @@ final class WorkflowTests: XCTestCase {
     func testInvalidModelOutputOffersManualWithoutRetry() throws {
         let f = try Fixture()
         try f.write("a", "a\n")
-        try Data("```json\nnot json; TOP_SECRET_RAW_OUTPUT\n```".utf8).write(to: f.temp.url.appendingPathComponent("model-output"))
+        try f.modelResponse("```json\nnot json; TOP_SECRET_RAW_OUTPUT\n```")
         let c = ScriptConsole(["m", "fix/manual", "fix: manually entered", "y"])
         try f.workflow(c).run()
         XCTAssertEqual(f.model.calls, 1)
@@ -79,6 +79,7 @@ final class WorkflowTests: XCTestCase {
 
     func testUnsupportedCommandCodeOffersManualWithoutSendingPayload() throws {
         let f = try Fixture(); try f.write("a", "a\n")
+        try f.script("cmd", "echo 'Command Code --print --no-session'")
         let c = ScriptConsole(["m", "fix/manual", "fix: manual metadata", "y"])
         try f.workflow(c, model: CommandCode(runner: f.runner)).run()
         XCTAssertFalse(f.modelWasInvoked)
