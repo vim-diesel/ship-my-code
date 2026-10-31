@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:ship-my-code}",
+      "name": "Debug ship",
+      "target": "ship",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug ship"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:ship-my-code}",
+      "name": "Release ship",
+      "target": "ship",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release ship"
+    }
+  ]
+}
