@@ -4,6 +4,27 @@
 
 `ship` suggests a commit message and, when needed, a branch name. You review the proposal and approve it before anything is committed or pushed. It uses your existing [Command Code](https://commandcode.ai/docs/quickstart) (`cmd`) login and selected model.
 
+## Why ship? The workflow it chooses
+
+`ship` is an opinionated, AI-assisted workflow around Git and GitHub CLI. Git handles staging, branches, commits, and pushes. GitHub CLI already supports [creating PRs from commit messages](https://cli.github.com/manual/gh_pr_create) and [squash merging with branch deletion](https://cli.github.com/manual/gh_pr_merge). `ship` combines those operations with generated descriptions, local secret checks, and interactive review so you repeat fewer commands and decisions.
+
+These are the choices it makes:
+
+| Opinion | What it means for your workflow |
+| --- | --- |
+| **Ship the whole project by default.** | Plain `ship` stages changes across the entire repository, even from a subfolder. Use `--staged` when you want to select the changes yourself. |
+| **Use conventional commit messages.** | Commit messages must be a single line in a format such as `fix: reject empty credentials`, including messages you enter manually. |
+| **Keep branch decisions simple.** | The first commit on `main` stays there. Later commits on `main` offer a direct commit or a suggested new branch. `master` and other known remote default branches require a work branch. Existing work branches keep their names. |
+| **Use your existing model setup.** | Command Code's selected model suggests commit messages, new branch names, and new PR descriptions. You can edit the suggestions or enter details manually. The model has no tools enabled. |
+| **Check before sending changes to AI.** | Sensitive filename checks and Gitleaks check the outgoing model request. Findings or scanner failures block generation; you can fix the issue, enter details manually, or cancel. |
+| **Review before publishing.** | Commits, pushes, PR publication, and merges require interactive approval. You can inspect the relevant diff or edit the proposal. Enter at the final approval prompt cancels. Staging and approved setup or remediation changes can remain after cancellation. |
+| **Push to a predictable destination.** | The default remote is `origin`, with the same branch name locally and remotely. Use `--remote NAME` to choose another remote. Ordinary pushes do not force-update remote branches. |
+| **Make PRs and merging explicit.** | Plain `ship` commits and pushes. `--pr` creates or reuses a PR; existing PR text stays unless you edit it. Only `--merge` requests merging. PR targets are selectable, with `main` listed first. |
+| **Finish uncommitted work before a PR or merge.** | Both modes offer to ship outstanding changes first or cancel. They require a clean worktree before continuing. |
+| **Squash merge and retire the work branch.** | `--merge` combines the PR's commits into one commit on the target. After confirming the merge, it updates and switches to the target, then deletes the reviewed work branch locally and remotely when safe. Blocked or unconfirmed merges keep the branch. |
+
+`ship` leaves test execution to your configured Git hooks and CI; it does not launch a test suite itself or resolve merge conflicts. Normal Git hooks run, and GitHub's required checks and reviews still apply. Secret checks are best effort checks of model requests, not a guarantee that everything being pushed is secret-free. Manual entry can proceed with unresolved findings or an incomplete scan after review.
+
 ## Install
 
 You need **macOS 13+**, **Swift 5.9+**, **Git**, **Command Code**, and **Gitleaks**. Install Apple's command-line tools with `xcode-select --install` if Swift or Git is missing.
@@ -125,7 +146,7 @@ There is no automatic merge when running plain `ship` or `ship --pr`. Use `--rem
 
 Before asking Command Code for a suggestion, `ship` checks sensitive filenames and scans the exact outgoing text with Gitleaks. Possible secrets block generation. It offers appropriate actions: keep a local file out of Git, open your editor to fix source, enter a message manually, or cancel.
 
-For commits, the model receives staged text changes and file metadata, including deleted lines. For PR text, it receives the branch diff from its shared ancestor with the target and the included commit subjects. Binary contents, unstaged changes, Git history, and remote URLs are excluded. Checks are best effort; manual entry does not make a commit secret-free.
+For commits, the model receives staged text changes and file metadata, including deleted lines. For PR text, it receives the branch diff from its shared ancestor with the target and the included commit subjects. Binary contents, unstaged changes, other Git history, and remote URLs are excluded. Checks are best effort; manual entry does not make a commit secret-free.
 
 If Command Code or Gitleaks is unavailable or fails, you can enter commit details manually or cancel. If a commit succeeds but its push fails, the commit stays local: run `ship --staged` again to review a push-only retry, or use the retry command it prints.
 
