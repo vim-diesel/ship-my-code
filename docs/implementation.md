@@ -11,7 +11,8 @@ A Swift package with no third-party Swift dependencies:
 - `RepositorySetup.swift`: Git initialization and GitHub setup through `gh`.
 - `Git.swift`: repository checks, staged changes, branch validation, and explicit pushes.
 - `Privacy.swift`: immutable request construction and Gitleaks scanning.
-- `Model.swift`: proposal validation and Command Code adapter.
+- `Model.swift`: commit/PR proposal validation and Command Code adapter.
+- `PullRequests.swift`: GitHub PR generation, target selection, merge verification, and branch cleanup.
 - `Remediation.swift`: ignore/untrack and editor actions.
 - `ProcessRunner.swift`: concurrent subprocess input, output, cancellation, and timeouts.
 - `Support.swift`: terminal input, options, temporary directories, and shared helpers.
@@ -26,7 +27,7 @@ The CLI invocation uses `--mod`, `--no-session`, `--no-skills`, `--skip-onboardi
 
 The model request includes instructions, old/new relative paths, change metadata, and complete staged text patches: additions, deletions, and context. Binary changes are metadata-only, including when Git attributes force a text diff. Repository roots, remote URLs, Git history, unstaged content, and binary bodies are excluded.
 
-The expected response is one JSON object with exactly `branch` and `message`. `branch` must be null when keeping the current branch. Messages must be single-line conventional commits of at most 500 UTF-8 bytes, without terminal controls. New branch names are validated by Git and checked against protected, local, and locally known remote names. Generated values are never executed as commands.
+For a commit, the expected response is one JSON object with exactly `branch` and `message`. For a PR it has exactly `title` and `body`; titles are single-line and up to 256 UTF-8 bytes, descriptions up to 16 KB with no terminal controls except newline/tab. The completion output budget is 1024 tokens for commits and 4096 for PRs. `branch` must be null when keeping the current branch. Messages must be single-line conventional commits of at most 500 UTF-8 bytes, without terminal controls. New branch names are validated by Git and checked against protected, local, and locally known remote names. Generated values are never executed as commands.
 
 A generation subprocess has a 90-second timeout and no automatic generation retry. Unsupported capabilities, failed requests, and invalid output offer manual entry or cancellation. Raw model output and subprocess diagnostics are withheld. The bootstrap query contains no repository data if the adapter cannot load.
 
@@ -59,13 +60,25 @@ Remediation preserves unrelated changes and partial staging:
 
 Git operations use argument arrays at the repository root. Default staging includes the entire repository; `--staged` preserves the current selection. The tool checks for detached HEAD, conflicts, unfinished Git operations, and redirected repository/index environment variables before staging. New repositories and missing remotes use the interactive setup flow; `gh repo create` is never called with `--push`.
 
-The first commit on an unborn `main` stays on `main`. Later changes on `main`, `master`, or the selected remote's locally known default use a new work branch. A single root commit on `main` can also be published during recovery if there is no locally known destination branch. Existing work branches retain their names.
+The first commit on an unborn `main` stays on `main`. On an established `main`, the final review explicitly offers a direct commit or the proposed new work branch. The direct-main permission applies only to that approved operation, including push-only recovery. `master` and other known remote default branches still require a work branch. A single root commit on `main` can also be published during recovery if there is no locally known destination branch. Existing work branches retain their names.
 
 Push previews use local remote-tracking information without fetching. Comparisons can be stale; an unavailable comparison is reported as unknown. Before approved actions, branch, HEAD, staged tree, destination, and the local comparison are rechecked. Normal Git hooks run; a changed commit tree, index, message, parent, or branch stops the push.
 
-Pushes use an explicit same-named branch refspec and upstream, with follow-tags, mirror behavior, and recursive submodule pushing disabled. There is no force push, merge, rebase, stash, reset, branch deletion, or pull-request creation.
+Pushes use an explicit same-named branch refspec and upstream, with follow-tags, mirror behavior, and recursive submodule pushing disabled. Normal shipping never merges, rewrites history, stashes, resets, deletes branches, or creates PRs. Only the explicit `--pr`/`--merge` modes perform GitHub PR operations.
 
 If committing fails after branch creation, the branch remains and the current state is reported. If pushing fails, the commit remains local and an exact shell-quoted retry command is printed. A later invocation supports push-only recovery. A transport error can occur after a remote accepts a push, so failure does not imply the remote is unchanged.
+
+## PR and merge operations
+
+`--pr` and `--merge` start from a committed work branch. A dirty worktree/index offers to run the normal ship flow first, or cancel. No edits are stashed, discarded, or silently excluded. These modes fetch the selected remote's heads before target selection; plain ship still uses local comparisons without fetching.
+
+Targets are remote branches, with main first and the source excluded. The model payload uses the merge-base-to-HEAD diff, reusing the same binary omission, filename checks, line mapping, and Gitleaks scanner as commit generation. Metadata and commit subjects are included in the scanned bytes. Flagged/failed scans or generation failures permit manual PR text or cancellation.
+
+GitHub CLI receives an explicit repository, head, base, title, and a description through `--body-file -`. Remote URLs are normalized to an HTTPS repository identifier without credentials. Open PRs for the same repository/head/base are reused rather than duplicated; existing text is changed only if edited during review. Branch/HEAD/index, worktree cleanliness, destination, and target ref are rechecked before publication.
+
+Merges use `gh pr merge --squash --match-head-commit SHA`, with no administrator bypass. PR head/base identity is verified. A queued or unconfirmed merge leaves branches intact. After a confirmed merge, ship fetches the target and verifies it contains GitHub's reported merge commit before switching/fast-forwarding locally. Divergence or new local edits stop cleanup. Remote source deletion is conditional on the reviewed tip via a lease; it cannot delete a branch that acquired new commits. The local source ref is removed with a compare-and-delete against its reviewed SHA, which also handles squash merges without relying on ancestry.
+
+PR creation or merging can succeed remotely even if the following network request fails. Errors retain the PR URL when known and direct the user to inspect GitHub; no destructive rollback or automatic mutation retry is attempted.
 
 ## Development
 

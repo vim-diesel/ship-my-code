@@ -26,6 +26,10 @@ final class RecordingModel: Generating {
         calls += 1
         return try commandCode.generate(payload, needsBranch: needsBranch)
     }
+    func generatePullRequest(_ payload: Data) throws -> PullRequestProposal {
+        calls += 1
+        return try commandCode.generatePullRequest(payload)
+    }
 }
 
 final class Fixture {
