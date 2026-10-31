@@ -48,6 +48,15 @@ final class Workflow {
         let git = try RepositorySetup(runner: runner, console: console).prepare(directory: directory, remote: options.remote)
         activeGit = git
         try git.preflight()
+        if options.pullRequest || options.merge {
+            try PullRequestFlow(git: git, console: console, scanner: scanner, model: model)
+                .run(merge: options.merge, shipChanges: { try self.shipChanges(git) })
+            return
+        }
+        try shipChanges(git)
+    }
+
+    private func shipChanges(_ git: Git) throws {
         if !options.staged {
             console.write("Staging changes across the whole repository with git add -A.")
             _ = try git.run(["add", "-A", "--", "."])
@@ -58,7 +67,7 @@ final class Workflow {
         let firstCommitOnMain = initial.head == nil && initial.branch == "main"
         let needsBranch = try !firstCommitOnMain && git.protectedBranches().contains(initial.branch)
         console.write("Repository: \(display(git.root.path))\nBranch:     \(display(initial.branch))")
-        if firstCommitOnMain { console.write("Your first commit will establish main. Later changes will use work branches.") }
+        if firstCommitOnMain { console.write("Your first commit will establish main.") }
         var localSuggestion = false
         while true {
             try git.preflight()
@@ -206,6 +215,8 @@ final class Workflow {
         while true {
             let branch = proposal.branch ?? state.branch
             let comparison = try git.comparison(branch: branch)
+            let chooseMain = state.branch == "main" && state.head != nil && proposal.branch != nil
+            let mainComparison = try chooseMain ? git.comparison(branch: "main") : nil
             let identity = try git.remoteIdentity()
             console.write("\nCurrent branch: \(display(state.branch))")
             if let newBranch = proposal.branch { console.write("Create branch:  \(display(newBranch))") }
@@ -218,18 +229,32 @@ final class Workflow {
                 console.write("Content was NOT SCANNED successfully; this commit has not been checked for secrets. \(unavailable)")
             }
             showComparison(comparison, newCommit: true)
-            switch try console.read("[y] proceed  [e] edit  [d] review complete staged diff locally  [N] cancel").lowercased() {
+            if let mainComparison {
+                console.write("\nYou're on main. Where should this commit go?\n  [1] Commit and push directly to main\n  [2] Use the suggested new branch: \(display(branch))")
+                if mainComparison.reference != comparison.reference || mainComparison.hash != comparison.hash || mainComparison.commits != comparison.commits {
+                    console.write("Direct-to-main push preview:")
+                    showComparison(mainComparison, newCommit: true)
+                }
+            }
+            let prompt = chooseMain ? "[1] proceed on main  [2] proceed on new branch  [e] edit  [d] review diff  [N] cancel" : "[y] proceed  [e] edit  [d] review complete staged diff locally  [N] cancel"
+            let choice = try console.read(prompt).lowercased()
+            switch choice {
             case "e": proposal = try manual(git, needsBranch: proposal.branch != nil, existing: proposal)
             case "d":
                 try git.verify(state)
                 console.write("Complete staged diff (local only; may contain sensitive data):")
                 console.write(display(try git.stagedDiff(), multiline: true))
-            case "y":
+            case "y", "2", "1":
+                guard choice == "y" || chooseMain else { throw ShipError.cancelled }
+                let directMain = chooseMain && choice == "1"
+                if directMain { proposal.branch = nil }
+                let selectedBranch = proposal.branch ?? state.branch
+                let selectedComparison = directMain ? mainComparison! : comparison
                 try git.verify(state)
-                try validatePushReview(git, branch: branch, comparison: comparison, identity: identity)
+                try validatePushReview(git, branch: selectedBranch, comparison: selectedComparison, identity: identity, allowMain: directMain)
                 if let newBranch = proposal.branch { try git.validateNewBranch(newBranch) }
                 try Proposal.validateMessage(proposal.message)
-                try commitAndPush(git, state: state, proposal: proposal, identity: identity)
+                try commitAndPush(git, state: state, proposal: proposal, identity: identity, allowMain: directMain)
                 return
             default:
                 if remediationApplied { console.write("Approved ignore/index edits remain in place.") }
@@ -238,16 +263,16 @@ final class Workflow {
         }
     }
 
-    private func validatePushReview(_ git: Git, branch: String, comparison: PushComparison, identity: Data) throws {
+    private func validatePushReview(_ git: Git, branch: String, comparison: PushComparison, identity: Data, allowMain: Bool = false) throws {
         let state = try git.state()
         let initialMain = try branch == state.branch && git.allowsInitialMain(state)
-        guard try initialMain || !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to commit or push to a protected branch.") }
+        guard try initialMain || (allowMain && branch == "main" && state.branch == "main") || !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to commit or push to a protected branch.") }
         guard try git.comparison(branch: branch) == comparison, try git.remoteIdentity() == identity else {
             throw ShipError.message("Remote destination or locally known remote state changed after review. Run ship again for a fresh review.")
         }
     }
 
-    private func commitAndPush(_ git: Git, state: RepositoryState, proposal: Proposal, identity: Data) throws {
+    private func commitAndPush(_ git: Git, state: RepositoryState, proposal: Proposal, identity: Data, allowMain: Bool = false) throws {
         let branch = proposal.branch ?? state.branch
         if proposal.branch != nil {
             _ = try git.run(["switch", "-c", branch])
@@ -275,12 +300,12 @@ final class Workflow {
             throw ShipError.message("The commit/hook result differs from the reviewed branch, content, message, or parent. The commit exists locally. Stopped before pushing; inspect it locally.")
         }
         guard try git.remoteIdentity() == identity else { throw ShipError.message("Commit exists locally, but the remote destination changed. Stopped before pushing.") }
-        try push(git, state: actual, branch: branch)
+        try push(git, state: actual, branch: branch, allowMain: allowMain)
     }
 
     private func pushOnly(_ git: Git) throws {
         let state = try git.state()
-        guard state.head != nil, try git.allowsInitialMain(state) || !git.protectedBranches().contains(state.branch) else {
+        guard state.head != nil, try state.branch == "main" || git.allowsInitialMain(state) || !git.protectedBranches().contains(state.branch) else {
             console.write("Nothing to ship."); return
         }
         let comparison = try git.comparison(branch: state.branch)
@@ -290,14 +315,14 @@ final class Workflow {
         showComparison(comparison, newCommit: false)
         guard try console.read("[y] push this branch only  [N] cancel").lowercased() == "y" else { throw ShipError.cancelled }
         try git.verify(state)
-        try validatePushReview(git, branch: state.branch, comparison: comparison, identity: identity)
-        try push(git, state: state, branch: state.branch)
+        try validatePushReview(git, branch: state.branch, comparison: comparison, identity: identity, allowMain: state.branch == "main")
+        try push(git, state: state, branch: state.branch, allowMain: state.branch == "main")
     }
 
-    private func push(_ git: Git, state: RepositoryState, branch: String) throws {
+    private func push(_ git: Git, state: RepositoryState, branch: String, allowMain: Bool = false) throws {
         try git.verify(state)
         let initialMain = try branch == state.branch && git.allowsInitialMain(state)
-        guard try initialMain || !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to push a protected branch. Any new commit remains local.") }
+        guard try initialMain || (allowMain && branch == "main" && state.branch == "main") || !git.protectedBranches().contains(branch) else { throw ShipError.message("Refusing to push a protected branch. Any new commit remains local.") }
         do { _ = try git.run(git.pushArguments(branch: branch)) }
         catch {
             console.write("Push did not complete successfully. The commit exists locally; the remote may have received it. Rerun ship to review recovery, or retry exactly:")

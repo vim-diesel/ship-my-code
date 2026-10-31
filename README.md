@@ -16,7 +16,7 @@ cmd login
 gh auth login
 ```
 
-Already signed in? Skip the login commands. `gh` is optional if your project already has a Git remote or you connect an existing repository URL.
+Already signed in? Skip the login commands. `gh` is required for creating GitHub repositories, PRs, and merges. Normal commits and pushes to an existing remote work without it.
 
 Build and install `ship`:
 
@@ -51,10 +51,15 @@ Create branch:  fix/login-validation
 Commit:         fix: reject empty login credentials
 Push to:        origin/fix/login-validation
 
-[y] proceed  [e] edit  [d] review complete staged diff locally  [N] cancel
+You're on main. Where should this commit go?
+  [1] Commit and push directly to main
+  [2] Use the suggested new branch: fix/login-validation
+
+[1] proceed on main  [2] proceed on new branch  [e] edit  [d] review diff  [N] cancel
 ```
 
-- **`y`** — commit and push.
+- **On `main`: `1`** commits directly there; **`2`** uses the suggested new branch.
+- **On a work branch: `y`** commits and pushes to that branch.
 - **`e`** — edit the message or proposed branch name. Enter keeps a suggestion.
 - **`d`** — inspect the full staged diff, then return to the proposal.
 - **Enter or `n`** — cancel. Your changes remain selected for the next commit.
@@ -75,6 +80,8 @@ Other edited or untracked files stay out of that commit.
 | `ship` | Include all changes, review, commit, and push. |
 | `ship --staged` | Include only changes already selected with `git add`. |
 | `ship --remote upstream` | Use the Git connection named `upstream` instead of `origin`. |
+| `ship --pr` | Generate and review a pull request from your current work branch. |
+| `ship --merge` | Create/reuse a PR, squash merge, and clean up the work branch. |
 | `ship --help` | Show help. |
 
 Options can be combined: `ship --staged --remote upstream`.
@@ -90,25 +97,35 @@ Setup creates an empty GitHub repository. Uploading code still requires approval
 | Where you are | What `ship` does |
 | --- | --- |
 | A new project on `main`, with no commits yet | Make the first commit on `main`. |
-| `main` after the first commit | Suggest a new branch for your changes. |
+| `main` after the first commit | Choose a direct commit to `main` or the suggested new branch. |
 | An existing work branch | Keep that branch and suggest a commit message. |
 
-`master` and the selected remote's known default branch are also protected after setup.
+`master` and other known remote default branches still use a new work branch. Direct commits to `main` require choosing that option at review.
 
-Keep using one work branch for a related change. When finished, open a pull request on GitHub, merge it into `main`, and delete the work branch. Then start your next change from the updated `main`:
+Use direct commits for small fixes when you want to keep things simple. Use a work branch when you want to review a change as a PR.
+
+## PRs and merging
+
+From a work branch, run either:
 
 ```sh
-git switch main
-git pull --ff-only
+ship --pr       # Create a PR and leave it open
+ship --merge    # Create/reuse a PR, then merge and clean up
 ```
 
-`ship` handles committing and pushing. Pull requests, merging, and branch cleanup are separate steps.
+Both commands ask which remote branch to target, with **`main` listed first**. For a new PR, `cmd` generates the title and description from the branch's committed changes after local secret checks. You can edit the text or review the diff before approving. An existing open PR is reused; its text is kept unless you edit it.
+
+`--merge` warns if you still have staged, unstaged, or untracked changes. It offers to **ship those changes first and continue**, or **cancel**. `--pr` uses the same check so your PR includes the work you intended.
+
+After approval, `ship` pushes the branch if needed. `--pr` prints the PR link. `--merge` performs a squash merge, respecting GitHub's checks and review requirements. Once the merge is confirmed, it updates your local target branch, switches you to it, and removes the reviewed work branch locally and remotely. If merging is blocked or cleanup cannot safely finish, it reports what happened and keeps the remaining branch/work.
+
+There is no automatic merge when running plain `ship` or `ship --pr`. Use `--remote NAME` with any mode to choose a different repository connection. `--staged` is for committing; run it separately before a PR/merge if you want to select only some changes.
 
 ## Secrets and failures
 
 Before asking `cmd` for a suggestion, `ship` checks sensitive filenames and scans the exact outgoing text with Gitleaks. Possible secrets block generation. It offers appropriate actions: keep a local file out of Git, open your editor to fix source, enter a message manually, or cancel.
 
-The model receives staged text changes and file metadata, including deleted lines. Binary contents, unstaged changes, Git history, and remote URLs are excluded. Checks are best effort; manual entry does not make a commit secret-free.
+For commits, the model receives staged text changes and file metadata, including deleted lines. For PR text, it receives the branch diff from its shared ancestor with the target and the included commit subjects. Binary contents, unstaged changes, Git history, and remote URLs are excluded. Checks are best effort; manual entry does not make a commit secret-free.
 
 If `cmd` or Gitleaks is unavailable or fails, you can enter commit details manually or cancel. If a commit succeeds but its push fails, the commit stays local: run `ship --staged` again to review a push-only retry, or use the retry command it prints.
 

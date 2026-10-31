@@ -171,8 +171,9 @@ final class Git {
         return try !run(["ls-files", "--others", "--exclude-standard", "-z"]).stdout.isEmpty
     }
 
-    func changes() throws -> [Change] {
-        let fields = try utf8(run(["diff", "--cached", "--name-status", "-z", "--find-renames", "--no-ext-diff"]).stdout)
+    func changes(from base: String? = nil) throws -> [Change] {
+        let range = base.map { [$0, "HEAD"] } ?? ["--cached"]
+        let fields = try utf8(run(["diff"] + range + ["--name-status", "-z", "--find-renames", "--no-ext-diff"]).stdout)
             .split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
         var changes: [Change] = []
         var i = 0
@@ -190,15 +191,16 @@ final class Git {
         return changes
     }
 
-    func entry(_ path: String, head: Bool = false) throws -> GitEntry? {
+    func entry(_ path: String, head: Bool = false, reference: String? = nil) throws -> GitEntry? {
         if try head && resolve("HEAD") == nil { return nil }
-        let data = try run(head ? ["ls-tree", "-z", "HEAD", "--", path] : ["ls-files", "--stage", "-z", "--", path]).stdout
+        let tree = reference ?? (head ? "HEAD" : nil)
+        let data = try run(tree.map { ["ls-tree", "-z", $0, "--", path] } ?? ["ls-files", "--stage", "-z", "--", path]).stdout
         let rows = try utf8(data).split(separator: "\0")
         for row in rows {
             guard let tab = row.firstIndex(of: "\t"), String(row[row.index(after: tab)...]) == path else { continue }
             let metadata = row[..<tab].split(separator: " ").map(String.init)
             guard metadata.count == 3 else { throw ShipError.message("Malformed Git entry.") }
-            return GitEntry(mode: metadata[0], hash: metadata[head ? 2 : 1])
+            return GitEntry(mode: metadata[0], hash: metadata[tree != nil ? 2 : 1])
         }
         return nil
     }
@@ -210,6 +212,23 @@ final class Git {
 
     func stagedDiff(paths: [String] = []) throws -> String {
         try utf8(run(["diff", "--cached"] + diffOptions + ["--"] + paths).stdout)
+    }
+
+    func branchDiff(from base: String, paths: [String] = []) throws -> String {
+        try utf8(run(["diff", base, "HEAD"] + diffOptions + ["--"] + paths).stdout)
+    }
+
+    func dirty() throws -> Bool { try hasChanges() || hasExcludedChanges() }
+
+    func fetchBranches() throws {
+        _ = try run(["fetch", "--no-tags", "--prune", "--no-recurse-submodules", "--", remote,
+                     "+refs/heads/*:refs/remotes/\(remote)/*"])
+    }
+
+    func remoteBranches() throws -> [String] {
+        let prefix = "refs/remotes/\(remote)/"
+        return try text(["for-each-ref", "--format=%(refname)", prefix]).split(separator: "\n")
+            .map(String.init).filter { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }.filter { $0 != "HEAD" }
     }
 
     func comparison(branch: String) throws -> PushComparison {

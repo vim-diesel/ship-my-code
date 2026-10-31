@@ -107,11 +107,15 @@ struct Options {
     var staged = false
     var remote = "origin"
     var help = false
+    var pullRequest = false
+    var merge = false
     init(_ args: [String]) throws {
         var i = 0
         while i < args.count {
             switch args[i] {
             case "--staged": staged = true
+            case "--pr": pullRequest = true
+            case "--merge": merge = true
             case "--help", "-h": help = true
             case "--remote":
                 i += 1
@@ -119,24 +123,27 @@ struct Options {
                     throw ShipError.message("--remote needs a remote name.")
                 }
                 remote = args[i]
-            default: throw ShipError.message("Unknown argument. Usage: ship [--staged] [--remote NAME] [--help]")
+            default: throw ShipError.message("Unknown argument. Use ship --help for available commands.")
             }
             i += 1
         }
+        if (pullRequest || merge) && staged { throw ShipError.message("--pr and --merge work on your branch's commits. Use ship --staged first to commit selected changes.") }
     }
     static let usage = """
-    Usage: ship [--staged] [--remote NAME] [--help]
+    Usage: ship [--staged | --pr | --merge] [--remote NAME] [--help]
 
     Get a commit suggestion, review your changes, then approve the commit and push.
 
     ship                 Include all changes across the project, except ignored files.
     ship --staged        Include only changes already selected with git add.
     ship --remote NAME   Use another Git connection instead of origin.
+    ship --pr            Generate and review a PR into a branch you select.
+    ship --merge         Create/reuse a PR, squash merge, and clean up the work branch.
     ship --help          Show this help.
 
     New projects: set up Git, choose a GitHub repo name and private/public visibility.
-    First commit: stay on main. Later changes on main: create a work branch.
-    Already on a work branch: keep using it. Merging and branch cleanup are separate.
+    On main: choose a direct commit or a suggested new branch. Work branches keep their name.
+    PR/merge targets list main first. Uncommitted changes must be shipped first or cancelled.
 
     Uses your cmd login and selected model, with local gitleaks checks first.
     Enter at the approval prompt cancels. Selected changes remain staged.
