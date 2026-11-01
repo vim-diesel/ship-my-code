@@ -4,6 +4,8 @@
 
 `ship` suggests a commit message and, when needed, a branch name. You review the proposal and approve it before anything is committed or pushed. It uses your existing [Command Code](https://commandcode.ai/docs/quickstart) (`cmd`) login and selected model.
 
+**Planned native Mac app:** see the [Ship for Mac implementation handoff](docs/macos/README.md) for the agreed SwiftUI/macOS 27 design, interactive Git graph, architecture, implementation milestones, and acceptance criteria. The app is not implemented yet.
+
 ## Why ship? The workflow it chooses
 
 `ship` is an opinionated, AI-assisted workflow around Git and GitHub CLI. Git handles staging, branches, commits, and pushes. GitHub CLI already supports [creating PRs from commit messages](https://cli.github.com/manual/gh_pr_create) and [squash merging with branch deletion](https://cli.github.com/manual/gh_pr_merge). `ship` combines those operations with generated descriptions, local secret checks, and interactive review so you repeat fewer commands and decisions.
